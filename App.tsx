@@ -1,8 +1,9 @@
-
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { BatchImageResizer, BatchImageResizerState } from './components/BatchImageResizer';
 import { VideoFrameExtractor, VideoFrameExtractorState } from './components/VideoFrameExtractor';
 import { GitManager, GitManagerState } from './components/GitManager';
+import { ScreenSizeChecker, ScreenSizeCheckerState } from './components/ScreenSizeChecker';
+import { QuickNote } from './components/QuickNote';
 
 // Define types for our data structures
 type SmartSwitchItem = {
@@ -15,8 +16,8 @@ type Column = {
 };
 
 // --- Tool Specific Types ---
-// Fix: Corrected typo in type name from `BatchImage-resizerState` to `BatchImageResizerState`.
-type ToolState = BatchImageResizerState | VideoFrameExtractorState | GitManagerState;
+type NoteState = { title: string; body: string };
+type ToolState = BatchImageResizerState | VideoFrameExtractorState | GitManagerState | ScreenSizeCheckerState;
 
 const itemsPerColumn = 3;
 const initialColumnsCount = 8; // Start with a reasonable number of columns
@@ -132,6 +133,7 @@ const App: React.FC = () => {
   const [closingTools, setClosingTools] = useState<string[]>([]);
 
   const [toolStates, setToolStates] = useState<Record<string, ToolState>>({});
+  const [noteStates, setNoteStates] = useState<Record<string, NoteState>>({});
 
   const toolInfo: Record<number, { title: string; description: string; }> = {
     1: {
@@ -145,6 +147,10 @@ const App: React.FC = () => {
     3: {
         title: 'Git Manager',
         description: "Preview files and copy links of any public GitHub Pages repository."
+    },
+    4: {
+        title: 'Screen Size Checker',
+        description: "Test website responsiveness across a variety of device screen sizes."
     }
   };
 
@@ -159,19 +165,21 @@ const App: React.FC = () => {
   const itemRefs = useRef(new Map<string, HTMLButtonElement | null>());
 
   const handleTabClick = (key: string) => {
-    if (key !== 'sidebar') {
-      const pos = parseKey(key);
-      const switchNumber = pos ? (pos.col * itemsPerColumn + pos.row + 1) : 0;
-      const isToolTab = !!toolInfo[switchNumber];
-      if (!isToolTab) return; // Do not allow empty tabs to be activated
-    }
-    
     const isCurrentlyActive = activeSwitches.has(key);
+
+    const pos = parseKey(key);
+    const switchNumber = pos ? (pos.col * itemsPerColumn + pos.row + 1) : 0;
+    const currentToolInfo = toolInfo[switchNumber];
+    const isNoteTab = !currentToolInfo;
 
     if (isCurrentlyActive) {
       setActiveSwitches(new Set());
     } else {
-      setActiveSwitches(new Set([key]));
+       if (isNoteTab) {
+          setActiveSwitches(new Set([key]));
+       } else {
+          setActiveSwitches(new Set([key]));
+       }
     }
   };
 
@@ -192,6 +200,13 @@ const App: React.FC = () => {
       setVisibleTools(prev => prev.filter(key => key !== keyToClose));
       setClosingTools(prev => prev.filter(key => key !== keyToClose));
     }, 500);
+  };
+  
+  const updateNoteState = (key: string, newNote: NoteState) => {
+    setNoteStates(prev => ({
+        ...prev,
+        [key]: newNote,
+    }));
   };
   
   const updateToolState = (key: string, newState: Partial<ToolState>) => {
@@ -477,6 +492,7 @@ const App: React.FC = () => {
                           {switchNumber === 1 && <BatchImageResizer state={toolStates[item.key] as BatchImageResizerState | undefined} onChangeState={(newState) => updateToolState(item.key, { ...newState, type: 'image-resizer' })} accentColor={baseColor} primaryButtonTextColor={primaryButtonTextColor} />}
                           {switchNumber === 2 && <VideoFrameExtractor state={toolStates[item.key] as VideoFrameExtractorState | undefined} onChangeState={(newState) => updateToolState(item.key, { ...newState, type: 'video-extractor' })} accentColor={baseColor} primaryButtonTextColor={primaryButtonTextColor} />}
                           {switchNumber === 3 && <GitManager state={toolStates[item.key] as GitManagerState | undefined} onChangeState={(newState) => updateToolState(item.key, { ...newState, type: 'git-manager' })} accentColor={baseColor} primaryButtonTextColor={primaryButtonTextColor} />}
+                          {switchNumber === 4 && <ScreenSizeChecker state={toolStates[item.key] as ScreenSizeCheckerState | undefined} onChangeState={(newState) => updateToolState(item.key, { ...newState, type: 'screen-size-checker' })} accentColor={baseColor} primaryButtonTextColor={primaryButtonTextColor} />}
                         </div>
                       </div>
                     </div>
@@ -496,8 +512,15 @@ const App: React.FC = () => {
                     const tabDescription = currentToolInfo?.description ?? null;
                     
                     const colors = tabColors[item.key];
-                    const backgroundColor = isToolTab ? (isCurrentlyActive ? baseColor : colors?.inactive) : '#FFFFFF';
-                    const baseTextColorStyle = isToolTab && isCurrentlyActive ? { color: getContrastingTextColor(baseColor) } : {};
+                    
+                    let backgroundColor;
+                    if (isCurrentlyActive) {
+                        backgroundColor = baseColor;
+                    } else {
+                        backgroundColor = isToolTab ? colors?.inactive : '#FFFFFF';
+                    }
+
+                    const baseTextColorStyle = isCurrentlyActive ? { color: getContrastingTextColor(baseColor) } : {};
                     const textColorClass = isToolTab ? (isCurrentlyActive ? '' : 'text-black') : 'text-black/30';
                     const separatorColor = isToolTab && isCurrentlyActive ? (getContrastingTextColor(baseColor) === '#FFFFFF' ? 'bg-white/30' : 'bg-black/20') : isToolTab ? 'bg-black/20' : 'bg-black/10';
                     
@@ -509,13 +532,13 @@ const App: React.FC = () => {
                         ref={el => { itemRefs.current.set(item.key, el); }}
                         onClick={() => handleTabClick(item.key)}
                         style={{ backgroundColor: backgroundColor || '#FFFFFF', minHeight: mobileSizeConfig.itemHeight }}
-                        className={`flex justify-center items-center relative z-10 rounded-xl shadow-lg transition-all duration-500 ease-in-out transform hover:scale-105 hover:shadow-2xl focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-gray-900 overflow-hidden ${!isToolTab ? 'cursor-default' : ''}`}
+                        className={`flex justify-center items-center relative z-10 rounded-xl shadow-lg transition-all duration-500 ease-in-out transform hover:scale-105 hover:shadow-2xl focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-gray-900 overflow-hidden`}
                         role="switch"
                         aria-checked={isCurrentlyActive}
-                        aria-label={isToolTab ? tabTitle : `Tool #${switchNumber}`}
+                        aria-label={isToolTab ? tabTitle : `Note Tab #${switchNumber}`}
                       >
                         <span className="absolute top-2 right-3 text-xs font-mono text-black">{switchNumber.toString().padStart(2, '0')}#</span>
-                        {isToolTab && (
+                        {isToolTab ? (
                           <div className={`flex flex-col items-center justify-center px-4 py-4 text-center transition-all duration-500 ${textColorClass}`} style={contentStyle}>
                             <h3 className="font-bold text-2xl">{tabTitle}</h3>
                             <div className={`w-full h-[1.5px] my-2 transition-colors duration-500 ${separatorColor}`}></div>
@@ -530,6 +553,23 @@ const App: React.FC = () => {
                                 <span className="text-black font-bold text-lg">Open</span>
                             </div>
                           </div>
+                        ) : (
+                           isCurrentlyActive ? (
+                                <QuickNote
+                                    value={noteStates[item.key] || { title: '', body: '' }}
+                                    onChange={(newNote) => updateNoteState(item.key, newNote)}
+                                    textColor={getContrastingTextColor(baseColor)}
+                                />
+                           ) : (
+                                noteStates[item.key] && (noteStates[item.key].title || noteStates[item.key].body) && (
+                                    <div className="w-full h-full p-4 overflow-y-auto text-left custom-scrollbar">
+                                        {noteStates[item.key].title && <h4 className="text-black font-bold whitespace-pre-wrap break-words text-lg mb-2">{noteStates[item.key].title}</h4>}
+                                        {noteStates[item.key].body && <p className="text-black whitespace-pre-wrap break-words text-sm">
+                                            {noteStates[item.key].body}
+                                        </p>}
+                                    </div>
+                                )
+                           )
                         )}
                       </button>
                     );
@@ -608,6 +648,14 @@ const App: React.FC = () => {
                                     primaryButtonTextColor={primaryButtonTextColor}
                                 />
                              )}
+                             {switchNumber === 4 && (
+                                <ScreenSizeChecker
+                                    state={toolStates[item.key] as ScreenSizeCheckerState | undefined}
+                                    onChangeState={(newState) => updateToolState(item.key, { ...newState, type: 'screen-size-checker'})}
+                                    accentColor={baseColor}
+                                    primaryButtonTextColor={primaryButtonTextColor}
+                                />
+                             )}
                           </div>
                       </div>
                     </div>
@@ -635,8 +683,14 @@ const App: React.FC = () => {
                       const expandedTabHeightClass = 'flex-[1.5_1_0%]';
                       
                       const colors = tabColors[item.key];
-                      const backgroundColor = isToolTab ? (isCurrentlyActive ? baseColor : colors?.inactive) : '#FFFFFF';
-                      const baseTextColorStyle = isToolTab && isCurrentlyActive ? { color: getContrastingTextColor(baseColor) } : {};
+                      let backgroundColor;
+                      if (isCurrentlyActive) {
+                          backgroundColor = baseColor;
+                      } else {
+                          backgroundColor = isToolTab ? colors?.inactive : '#FFFFFF';
+                      }
+
+                      const baseTextColorStyle = isCurrentlyActive ? { color: getContrastingTextColor(baseColor) } : {};
                       const textColorClass = isToolTab ? (isCurrentlyActive ? '' : 'text-black') : 'text-black/30';
                       const separatorColor = isToolTab && isCurrentlyActive ? (getContrastingTextColor(baseColor) === '#FFFFFF' ? 'bg-white/30' : 'bg-black/20') : isToolTab ? 'bg-black/20' : 'bg-black/10';
 
@@ -662,13 +716,13 @@ const App: React.FC = () => {
                           }}
                           className={`flex justify-center items-center relative z-10 rounded-xl shadow-lg transition-all duration-500 ease-in-out transform hover:scale-103 hover:shadow-2xl focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-gray-900 overflow-hidden ${
                               isToolOpenOrOpening ? '' : (isCurrentlyActive ? expandedTabHeightClass : 'flex-1')
-                          } ${!isToolOpenOrOpening && !isLastVisible ? 'mb-4' : ''} ${!isToolTab ? 'cursor-default' : ''}`}
+                          } ${!isToolOpenOrOpening && !isLastVisible ? 'mb-4' : ''}`}
                           role="switch"
                           aria-checked={isCurrentlyActive}
-                          aria-label={isToolTab ? tabTitle : `Tool #${switchNumber}`}
+                          aria-label={isToolTab ? tabTitle : `Note Tab #${switchNumber}`}
                         >
                           <span className="absolute top-2 right-3 text-xs font-mono text-black">{switchNumber.toString().padStart(2, '0')}#</span>
-                          {isToolTab && (
+                          {isToolTab ? (
                             <div className={`flex flex-col items-center justify-center w-full h-full px-16 py-4 text-center transition-all duration-500 ${textColorClass}`} style={contentStyle}>
                                 <h3 className="font-bold text-3xl">{tabTitle}</h3>
                                 <div className={`w-full h-[1.5px] my-2 transition-colors duration-500 ${separatorColor}`}></div>
@@ -683,7 +737,24 @@ const App: React.FC = () => {
                                   <span className="text-black font-bold text-lg">Open</span>
                                 </div>
                             </div>
-                          )}
+                           ) : (
+                               isCurrentlyActive ? (
+                                    <QuickNote
+                                        value={noteStates[item.key] || { title: '', body: '' }}
+                                        onChange={(newNote) => updateNoteState(item.key, newNote)}
+                                        textColor={getContrastingTextColor(baseColor)}
+                                    />
+                               ) : (
+                                   noteStates[item.key] && (noteStates[item.key].title || noteStates[item.key].body) && (
+                                       <div className="w-full h-full p-4 overflow-y-auto text-left custom-scrollbar">
+                                           {noteStates[item.key].title && <h4 className="text-black font-bold whitespace-pre-wrap break-words text-xl mb-2">{noteStates[item.key].title}</h4>}
+                                           {noteStates[item.key].body && <p className="text-black whitespace-pre-wrap break-words text-base">
+                                               {noteStates[item.key].body}
+                                           </p>}
+                                       </div>
+                                   )
+                               )
+                           )}
                         </button>
                       );
                     })}
